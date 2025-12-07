@@ -1,8 +1,8 @@
-name: Nuclei scan over Tor (SOCKS5)
+name: Nuclei scan over Tor (Docker torproxy)
 
 on:
   workflow_dispatch:
-  # push: { branches: [ main ] }   # uncomment if you want push trigger
+  # push: { branches: [ main ] }   # uncomment to run on push
 
 jobs:
   tor-scan:
@@ -10,34 +10,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: 'stable' }
+        with: { go-version: stable }
 
-      - name: Install Tor & nuclei
+      - name: Install Nuclei & update templates
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tor
           go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
           nuclei -update-templates
 
-      - name: Start Tor service
+      - name: Start Tor container
         run: |
-          sudo systemctl start tor
-          sleep 5           # give Tor time to bootstrap
-          curl --socks5 127.0.0.1:9055 https://check.torproject.org/api/ip  # quick check
+          docker run -d --rm --name tor -p 9050:9050 dperson/torproxy:latest
+          sleep 10
+          curl --socks5 127.0.0.1:9050 https://check.torproject.org/api/ip
 
       - name: Run Nuclei through Tor
         run: |
           nuclei \
             -u "https://fetena.net" \
+            -proxy socks5://127.0.0.1:9050 \
             -jsonl -o nuclei.jsonl \
             -json-export nuclei.json \
             -severity critical,high,medium \
-            -rl 30 -c 10 -timeout 15 -retries 2 \
-            -H "User-Agent: Nuclei-GHA/1.0" \
-            -proxy socks5://127.0.0.1:9050 \
+            -rl 20 -c 5 -timeout 15 -retries 2 \
             -stats
 
-      - name: Upload reports
+      - name: Upload JSON reports
         uses: actions/upload-artifact@v4
         with:
           name: nuclei-tor-reports
