@@ -1,0 +1,49 @@
+name: Nuclei – single-target deep scan (JSON out)
+
+on:
+  workflow_dispatch:               # manual button
+  # push:                          # uncomment if you want push-trigger
+  #   branches: [ main ]
+
+env:
+  TARGET         : 'https://example.com'   # ← host to scan
+  JSON_FILE      : 'nuclei-results.json'   # final structured JSON
+  JSONL_FILE     : 'nuclei-log.jsonl'      # streaming JSON-Lines
+
+jobs:
+  nuclei:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo (only needed if you keep custom templates in repo)
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install & update Nuclei
+        run: |
+          go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+          nuclei -update-templates
+          nuclei -version
+
+      - name: Run Nuclei – single target, detailed config, JSON output
+        run: |
+          nuclei \
+            -u "${{ env.TARGET }}" \
+            -jsonl -o "${{ env.JSONL_FILE }}" \
+            -json-export "${{ env.JSON_FILE }}" \
+            -severity critical,high,medium,low \
+            -rl 30 -c 10 -timeout 8 -retries 2 -max-host-error 10 \
+            -H "User-Agent: Nuclei-GHA/1.0" \
+            -stats
+
+      - name: Upload JSON artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuclei-json-reports
+          path: |
+            ${{ env.JSON_FILE }}
+            ${{ env.JSONL_FILE }}
+          retention-days: 30
