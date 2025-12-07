@@ -1,4 +1,4 @@
-name: Nuclei scan over Tor (Docker torproxy)
+name: Nuclei scan over Tor (Docker torproxy) – DNS via Tor
 
 on:
   workflow_dispatch:
@@ -21,17 +21,19 @@ jobs:
         run: |
           docker run -d --rm --name tor -p 9050:9050 dperson/torproxy:latest
           sleep 10
-          curl --socks5 127.0.0.1:9050 https://check.torproject.org/api/ip
+          curl --socks5 127.0.0.1:9050 https://www.cloudflare.com/cdn-cgi/trace
 
-      - name: Run Nuclei through Tor
+      - name: Run Nuclei through Tor (DNS + HTTP)
         run: |
           nuclei \
             -u "https://fetena.net" \
             -proxy socks5://127.0.0.1:9050 \
+            -proxy-dns socks5://127.0.0.1:9050 \
             -jsonl -o nuclei.jsonl \
             -json-export nuclei.json \
             -severity critical,high,medium \
-            -rl 20 -c 5 -timeout 15 -retries 2 \
+            -rl 10 -c 3 -timeout 20 -retries 3 \
+            -tags cve,exposure,ssl,tech,dns \
             -stats
 
       - name: Upload JSON reports
