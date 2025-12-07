@@ -1,49 +1,39 @@
-name: Nuclei – single-target deep scan (JSON out)
+name: Nuclei – single-target scan (target hard-coded in YAML)
 
 on:
-  workflow_dispatch:               # manual button
-  # push:                          # uncomment if you want push-trigger
-  #   branches: [ main ]
-
-env:
-  TARGET         : 'https://example.com'   # ← host to scan
-  JSON_FILE      : 'nuclei-results.json'   # final structured JSON
-  JSONL_FILE     : 'nuclei-log.jsonl'      # streaming JSON-Lines
+  workflow_dispatch:          # manual button only
+  # push:                     # uncomment to trigger on every push
 
 jobs:
-  nuclei:
+  scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo (only needed if you keep custom templates in repo)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # only needed if you store custom templates
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
+      - uses: actions/setup-go@v5
+        with: { go-version: 'stable' }
 
-      - name: Install & update Nuclei
+      - name: Install Nuclei & templates
         run: |
           go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
           nuclei -update-templates
-          nuclei -version
 
-      - name: Run Nuclei – single target, detailed config, JSON output
+      - name: Run Nuclei (target + config inside this YAML)
         run: |
           nuclei \
-            -u "${{ env.TARGET }}" \
-            -jsonl -o "${{ env.JSONL_FILE }}" \
-            -json-export "${{ env.JSON_FILE }}" \
-            -severity critical,high,medium,low \
-            -rl 30 -c 10 -timeout 8 -retries 2 -max-host-error 10 \
-            -H "User-Agent: Nuclei-GHA/1.0" \
+            -u "https://fetena.net" \
+            -jsonl -o "nuclei.jsonl" \
+            -json-export "nuclei.json" \
+            -severity critical,high,medium \
+            -rl 50 -c 15 -timeout 10 -retries 3 \
+            -H "User-Agent: Nuclei-GHA-scanner/1.0" \
             -stats
 
-      - name: Upload JSON artefacts
+      - name: Upload JSON reports
         uses: actions/upload-artifact@v4
         with:
-          name: nuclei-json-reports
+          name: nuclei-reports
           path: |
-            ${{ env.JSON_FILE }}
-            ${{ env.JSONL_FILE }}
+            nuclei.json
+            nuclei.jsonl
           retention-days: 30
